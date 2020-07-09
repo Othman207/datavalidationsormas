@@ -2,13 +2,13 @@ import pandas as pd
 import numpy as np
 
 # reading csv
-dq = pd.read_csv('/Users/othman/Downloads/Othman_covid19_cases_confirmed_2020-06-30 - covid19_cases_confirmed_2020-06.csv')
+dq = pd.read_csv('/Users/othman/Downloads/covid19_confirmed_cases_Updated_2020-07-06 - covid19_confirmed_cases_2020-07.csv')
 
 # Replace nan with "blanks"
 dq1 = dq.replace(np.nan, 'blank', regex=True)
 
 # create dummies
-dq2 = pd.get_dummies(dq1, columns=["Sex", "Age", "Case classification",	"Investigation status",	"Outcome of case",	"Quarantine",
+dq2 = pd.get_dummies(dq1, columns=["Sex", "Ward", "Age", "Case classification",	"Investigation status",	"Outcome of case",	"Quarantine",
                                     "Admitted as inpatient?", "Present Condition of Person",
                                     "Left against medical advice",	"Traveled",
                                     "Direct contact with a confirmed case", "directcontactprobablecase",	"Symptomatic",	"First symptom",
@@ -22,7 +22,7 @@ dq2 = pd.get_dummies(dq1, columns=["Sex", "Age", "Case classification",	"Investi
 
 
 # selecting subset
-dq3 = dq2[['EPID number', 'Date of report (dd/MM/yy)', 'State', 'LGA', 'Sex_blank', 'Age_blank',
+dq3 = dq2[['EPID number', 'Date of report (dd/MM/yy)', 'State', 'LGA', 'Sex_blank', 'Age_blank', 'Ward_blank',
            'Case classification_CONFIRMED', 'Quarantine_blank', 'Admitted as inpatient?_blank',
            'Present Condition of Person_blank', 'Traveled_blank',
            'Direct contact with a confirmed case_blank', 'directcontactprobablecase_blank',
@@ -35,12 +35,18 @@ dq3 = dq2[['EPID number', 'Date of report (dd/MM/yy)', 'State', 'LGA', 'Sex_blan
            'Pneumonia (clinical or radiologic)_blank', 'Loss of Taste_blank', 'Loss of Smell_blank',
            'Coughing up blood (haemoptysis)_blank', 'First Lab Result (Pathogentest)_blank']]
 
-dq3['Date of report (dd/MM/yy)'] = pd.to_datetime(dq3['Date of report (dd/MM/yy)'])
+# bad_dq = dq3.index.isin([26618,26619,26620,26621,26622,20350])
+
+# dq4 = dq3[~bad_dq]
+
+dq3['Date of report (dd/MM/yy)'] = pd.to_datetime(dq3['Date of report (dd/MM/yy)'], errors='coerce')
+
+
 
 dq3['Week_Number'] = dq3['Date of report (dd/MM/yy)'].dt.week
 
 # Create pivot table, rows = week number and states, values = 35 priority columns, function = sum
-dq4 = pd.pivot_table(dq3, index=["Week_Number", "State"], values=['Case classification_CONFIRMED', 'Sex_blank', 'Age_blank', 'Quarantine_blank', 'Admitted as inpatient?_blank',
+dq4 = pd.pivot_table(dq3, index=["Week_Number", "State"], values=['Case classification_CONFIRMED', 'Ward_blank', 'Sex_blank', 'Age_blank', 'Quarantine_blank', 'Admitted as inpatient?_blank',
            'Present Condition of Person_blank', 'Traveled_blank',
            'Direct contact with a confirmed case_blank', 'directcontactprobablecase_blank',
            'Abdominal pain_blank', 'Chest pain_blank', 'Chills or sweats_blank', 'Confused or disoriented_blank',
@@ -52,6 +58,12 @@ dq4 = pd.pivot_table(dq3, index=["Week_Number", "State"], values=['Case classifi
            'Pneumonia (clinical or radiologic)_blank', 'Loss of Taste_blank', 'Loss of Smell_blank',
            'Coughing up blood (haemoptysis)_blank', 'First Lab Result (Pathogentest)_blank'],aggfunc=np.sum).reset_index()
 
+# Cumulative cases by state
+dq4['state_cumulative'] = dq4.groupby('State')['Case classification_CONFIRMED'].cumsum()
+
+# Sort columns by state and week numbers
+dq5 = dq4.sort_values(['State', 'Week_Number'],ascending=[True, True])
+
 # Filter by week number e.g wk25
 # wk = dq4.query('Week_Number == [25]')
 
@@ -59,10 +71,10 @@ dq4 = pd.pivot_table(dq3, index=["Week_Number", "State"], values=['Case classifi
 
 # Or for multiple weeks use:
 
-wk = dq4.query('Week_Number == [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]')
+wk = dq5.query('Week_Number == [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]')
 
 # Reorder columns
-neworder_wk = ['Week_Number', 'State', 'Case classification_CONFIRMED', 'Sex_blank', 'Age_blank', 'Quarantine_blank', 'Admitted as inpatient?_blank',
+neworder_wk = ['Week_Number', 'State', 'Case classification_CONFIRMED', 'state_cumulative', 'Ward_blank', 'Sex_blank', 'Age_blank', 'Quarantine_blank', 'Admitted as inpatient?_blank',
            'Present Condition of Person_blank', 'Traveled_blank',
            'Direct contact with a confirmed case_blank', 'directcontactprobablecase_blank',
            'Abdominal pain_blank', 'Chest pain_blank', 'Chills or sweats_blank', 'Confused or disoriented_blank',
@@ -76,17 +88,17 @@ neworder_wk = ['Week_Number', 'State', 'Case classification_CONFIRMED', 'Sex_bla
 
 wk = wk.reindex(columns=neworder_wk)
 
-# Create total column and sum up 35 priority columns
-wk['Total'] = wk.iloc[:,-35:].sum(axis=1)
+# Create total column and sum up 36 priority columns
+wk['Total'] = wk.iloc[:,-36:].sum(axis=1)
 
 #  Create % of Missing Values column
-wk['Missing % (Net)'] = wk['Total']/wk['Case classification_CONFIRMED']/34*100
+wk['Missing % (Gross)'] = wk['Total']/wk['state_cumulative']/39*100
 
 # Create Completeness column
-wk['Completeness (Net)'] = 100 - wk['Missing % (Net)']
+wk['Completeness (Gross)'] = 100 - wk['Missing % (Gross)']
 
 # National Average row to calculate the mean
 wk.loc['National Average'] = wk.mean()
 
 # Export csv
-wk.to_csv("/Users/othman/Downloads/wkcl_update.csv")
+wk.to_csv("/Users/othman/Downloads/wk_cum_update.csv")
